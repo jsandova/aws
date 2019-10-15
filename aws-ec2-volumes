@@ -1,0 +1,85 @@
+#!/bin/bash
+#author: Juan Sandoval, version 1.0
+profile=""
+host=$2
+DeviceName=$3
+size=$4
+
+function vol_list () {
+    vol_list=$(aws ec2 describe-instances --profile $profile --filters "Name=tag:Name,Values=$host" --query 'Reservations[*].Instances[*].[Tags[?Key==Name].Value,InstanceId,BlockDeviceMappings,DeviceName[*].Ebs.VolumeId]' --output text)
+}
+
+function get_ec2_id () {
+    ec2_id=$(aws ec2 describe-instances --profile $profile --filters "Name=tag:Name,Values=$host"   --output text --query 'Reservations[*].Instances[*].InstanceId')
+    #vol_ids=$(grep dev $ec2_id)
+    vol_size=$(aws ec2 describe-volumes  --profile $profile --filters Name=attachment.instance-id,Values=$ec2_id --query 'Volumes[*].{ID:Size}' --output text)
+}
+
+function get_vol_id () {
+    vol_id=$(aws ec2 describe-volumes --profile $profile --filters Name=attachment.device,Values=$DeviceName Name=attachment.instance-id,Values=$ec2_id --query 'Volumes[*].{ID:VolumeId}' --output text)
+    vol_size=$(aws ec2 describe-volumes --profile $profile --filters Name=attachment.instance-id,Values=$ec2_id Name=attachment.device,Values=$DeviceName --query 'Volumes[*].{ID:Size}' --output text)
+}
+
+function modify_vol () {
+    aws ec2 modify-volume  --profile $profile --size $size --volume-id $vol_id
+}
+
+if [[ $# -eq "" ]]
+    then
+    echo "Try the help menu:  aws-ec2-volumes -h"
+    exit
+else
+
+while [ ! $# -eq 0 ]
+do
+    case "$1" in
+        --help | help| -h|-help)
+            echo "help menu:"
+            echo "-l|--list|list list volumes for a hostname"
+            echo "-m|--modify|modify modify size of volume"
+            echo "-s|--size|size show size of volume"
+            echo "Example: aws-ec2-volumes -l hostname /dev/sda1"
+            echo "Example: aws-ec2-volumes -m 200 vol-0f1c73fd2f054d2e7"
+            exit
+            ;;
+        --list|-l|list)
+            read -p "Enter your okta profile: "  profile
+            read -p "Enter hostname: "  host
+            while [[ "$host" != '' ]] && [[ "$profile" != '' ]] # variable is empty...
+            do
+	    vol_list
+            get_ec2_id
+            get_vol_id
+            echo -e "\n$vol_list"
+            exit
+            done
+            echo "There is an empty value for one of the questions. Try again."
+            ;;
+        --size|-s|size)
+            read -p "Enter your okta profile: "  profile
+            read -p "Enter hostname: "  host
+            read -p "Enter device name (i.e /dev/sda1): "  DeviceName
+            while [[ "$host" != '' ]] && [[ "$profile" != '' ]] && [[ "$DeviceName" != '' ]] # variable is empty...
+	    do
+            get_ec2_id
+            get_vol_id
+            echo -e "\nName: $host\n""EC2-Id: $ec2_id\n""Volume-id: $vol_id\n""Device: $DeviceName\n""Size: $vol_size"
+            exit
+            done
+            echo "There is an empty value for one of the questions. Try again."
+            ;;
+        --modify|-m|modify)
+            read -p "Enter your okta profile: "  profile
+            read -p "Enter volume id: "  vol_id
+            read -p "Enter disk size: "  size
+            while [[ "$profile" != '' ]] && [[ "$vol_id" != '' ]] && [[ "$size" != '' ]] # variable is empty...
+	    do
+            modify_vol
+            exit
+            done
+            echo "There is an empty value for one of the questions. Try again."
+            ;;
+    esac
+    shift
+done
+fi
